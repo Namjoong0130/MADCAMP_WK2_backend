@@ -1,0 +1,201 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --- Enums ---
+enum Category {
+  TOP
+  BOTTOM
+  OUTER
+  SHOES
+  HAT
+  ACC
+}
+
+enum FundingStatus {
+  FUNDING
+  SUCCESS
+  FAIL
+  MAKING
+  DELIVERY
+}
+
+enum FittingStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum NotiType {
+  FUNDING_SUCCESS
+  NEW_COMMENT
+  PRODUCTION_UPDATE
+  GENERAL
+}
+
+// --- Models ---
+
+model User {
+  user_id        Int       @id @default(autoincrement())
+  google_id      String?
+  email          String    @unique
+  password       String?
+  userName       String
+  height         Float
+  shoulderWidth  Float?
+  chestCircum    Float?
+  waistCircum    Float?
+  hipCircum      Float?
+  armLength      Float?
+  legLength      Float?
+  neckCircum     Float?
+  footSize       Int?
+  coins          Int       @default(10000)
+  styleTags      String[]
+  bodyTypeLabel  String?
+  basePhotoUrl   String?
+  pixelRatio     Float?
+  shippingAddress Json?
+  updatedAt      DateTime  @updatedAt
+  refresh_token  String?
+  is_creator     Boolean   @default(false)
+  deleted_at     DateTime?
+
+  // Relations
+  brand         Brand?
+  follows       Follow[]
+  fittings      Fitting[]
+  invests       Invest[]
+  comments      Comment[]
+  notifications Notification[]
+}
+
+model Brand {
+  brand_id       Int       @id @default(autoincrement())
+  owner_id       Int       @unique
+  brand_name     String
+  brand_logo     String?
+  is_public      Boolean   @default(true)
+  totalFollowers Int       @default(0)
+  deleted_at     DateTime?
+
+  owner          User      @relation(fields: [owner_id], references: [user_id])
+  followers      Follow[]
+  clothes        Cloth[]
+}
+
+model Follow {
+  follow_id      Int      @id @default(autoincrement())
+  follower_id    Int
+  target_brand   Int
+  created_at     DateTime @default(now())
+
+  follower       User     @relation(fields: [follower_id], references: [user_id])
+  brand          Brand    @relation(fields: [target_brand], references: [brand_id])
+}
+
+model Cloth {
+  clothing_id    Int       @id @default(autoincrement())
+  brand_id       Int
+  clothing_name  String
+  category       Category
+  stretch        Int
+  weight         Int
+  stiffness      Int
+  thickness      Int
+  layer_order    Int
+  size_specs     Json
+  design_prompt  String
+  is_public      Boolean   @default(true)
+  viewCount      Int       @default(0)
+  likeCount      Int       @default(0)
+  likedUserIds   Int[]
+  ai_model_ver   String?
+  thumbnail_url  String?
+  deleted_at     DateTime?
+
+  brand          Brand     @relation(fields: [brand_id], references: [brand_id])
+  fund           Fund?
+}
+
+model Fund {
+  funding_id       Int           @id @default(autoincrement())
+  clothing_id      Int           @unique
+  goal_amount      Int
+  current_amount   Int           @default(0)
+  participantCount Int           @default(0)
+  status           FundingStatus @default(FUNDING)
+  deadline         DateTime
+  production_note  String?
+  view_count       Int           @default(0)
+  deleted_at       DateTime?
+
+  cloth            Cloth         @relation(fields: [clothing_id], references: [clothing_id])
+  invests          Invest[]
+  comments         Comment[]
+}
+
+model Fitting {
+  fitting_id     Int           @id @default(autoincrement())
+  user_id        Int
+  clothing_ids   Int[]
+  result_img_url String?
+  fit_score      Float?
+  is_shared      Boolean       @default(false)
+  created_at     DateTime      @default(now())
+  status         FittingStatus @default(PENDING)
+  error_msg      String?
+  deleted_at     DateTime?
+
+  user           User          @relation(fields: [user_id], references: [user_id])
+}
+
+model Invest {
+  invest_id        Int      @id @default(autoincrement())
+  user_id          Int
+  funding_id       Int
+  amount           Int
+  is_cancelled     Boolean  @default(false)
+  created_at       DateTime @default(now())
+  transaction_hash String?  @unique
+  prev_coins       Int
+  post_coins       Int
+
+  user             User     @relation(fields: [user_id], references: [user_id])
+  fund             Fund     @relation(fields: [funding_id], references: [funding_id])
+}
+
+model Comment {
+  comment_id     Int       @id @default(autoincrement())
+  funding_id     Int
+  user_id        Int
+  content        String
+  parent_id      Int?
+  rating         Int?
+  created_at     DateTime  @default(now())
+  like_count     Int       @default(0)
+  deleted_at     DateTime?
+
+  fund           Fund      @relation(fields: [funding_id], references: [funding_id])
+  user           User      @relation(fields: [user_id], references: [user_id])
+  parent         Comment?  @relation("ReplyTo", fields: [parent_id], references: [comment_id])
+  replies        Comment[] @relation("ReplyTo")
+}
+
+model Notification {
+  noti_id    Int      @id @default(autoincrement())
+  user_id    Int
+  type       NotiType
+  message    String
+  is_read    Boolean  @default(false)
+  created_at DateTime @default(now())
+
+  user       User     @relation(fields: [user_id], references: [user_id])
+}
+

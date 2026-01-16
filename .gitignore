@@ -1,0 +1,15 @@
+# 비밀번호 및 API 키 (가장 중요 ⭐)
+.env
+.env.local
+
+# 라이브러리 (용량이 크고 npm install로 설치 가능함)
+node_modules/
+
+# Prisma 생성 파일
+/prisma/migrations/
+/prisma/client/
+
+# 로그 및 시스템 파일
+npm-debug.log*
+.DS_Store
+dist/
