@@ -1,31 +1,33 @@
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
+const authRoutes = require('./routes/authRoutes');
 const clothRoutes = require('./routes/clothRoutes');
-// 여기에 다른 라우터들을 추가로 가져올 예정입니다.
 
 dotenv.config();
 
 const app = express();
 
 // --- 미들웨어 설정 ---
-app.use(cors()); // 다른 도메인(프론트엔드)에서의 요청 허용
-app.use(express.json()); // JSON 형식의 데이터 해석
-app.use(express.urlencoded({ extended: true })); // URL 인코딩된 데이터 해석
+app.use(cors()); 
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// 정적 파일 서빙 (브라우저에서 이미지 접근 가능하게 함)
 app.use('/uploads', express.static('uploads'));
 
 // --- 라우터 연결 ---
-// 모든 의류 관련 API는 /api/clothes 경로로 시작합니다.
+// 에러 발생 지점(19라인 근처)을 해결하기 위해 라우터 객체 자체를 연결합니다.
+app.use('/api/auth', authRoutes);
 app.use('/api/clothes', clothRoutes);
 
 // --- 에러 핸들링 미들웨어 ---
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(500).json({ 
+  res.status(err.status || 500).json({ 
     success: false, 
-    message: '서버 내부 에러가 발생했습니다.',
-    error: err.message 
+    message: err.message || '서버 내부 에러 발생' 
   });
 });
 
-module.exports = app;
+module.exports = app; // server.js에서 사용하기 위해 내보냄
