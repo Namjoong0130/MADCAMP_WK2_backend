@@ -8,6 +8,7 @@ datasource db {
 }
 
 // --- Enums ---
+
 enum Category {
   TOP
   BOTTOM
@@ -17,12 +18,19 @@ enum Category {
   ACC
 }
 
+enum Gender {
+  MALE
+  FEMALE
+  UNISEX
+}
+
 enum FundingStatus {
   FUNDING
   SUCCESS
   FAIL
   MAKING
   DELIVERY
+  COMPLETED
 }
 
 enum FittingStatus {
@@ -42,38 +50,47 @@ enum NotiType {
 // --- Models ---
 
 model User {
-  user_id        Int       @id @default(autoincrement())
-  google_id      String?
-  email          String    @unique
-  password       String?
-  userName       String
-  height         Float
-  shoulderWidth  Float?
-  chestCircum    Float?
-  waistCircum    Float?
-  hipCircum      Float?
-  armLength      Float?
-  legLength      Float?
-  neckCircum     Float?
-  footSize       Int?
-  coins          Int       @default(10000)
-  styleTags      String[]
-  bodyTypeLabel  String?
-  basePhotoUrl   String?
-  pixelRatio     Float?
-  shippingAddress Json?
-  updatedAt      DateTime  @updatedAt
-  refresh_token  String?
-  is_creator     Boolean   @default(false)
-  deleted_at     DateTime?
+  user_id           Int           @id @default(autoincrement())
+  google_id         String?
+  email             String        @unique
+  password          String?
+  userName          String
+  
+  // 신체 수치 (Unique 제거)
+  height            Float
+  weight            Float
+  shoulderWidth     Float?
+  chestCircum       Float?
+  waistCircum       Float?
+  hipCircum         Float?
+  armLength         Float?
+  legLength         Float?
+  neckCircum        Float?
+  footSize          Int?
+
+  coins             Int           @default(0) // Cash에서 통일
+  tokens            Int           @default(0) // 보유 디자인 토큰
+  styleTags         String[]
+  bodyTypeLabel     String?
+  basePhotoUrl      String?
+  pixelRatio        Float?
+  shippingAddress   Json?
+  
+  unread_noti_count Int           @default(0)
+  total_liked_count Int           @default(0)
+  is_creator        Boolean       @default(false)
+  
+  updatedAt         DateTime      @updatedAt
+  refresh_token     String?
+  deleted_at        DateTime?
 
   // Relations
-  brand         Brand?
-  follows       Follow[]
-  fittings      Fitting[]
-  invests       Invest[]
-  comments      Comment[]
-  notifications Notification[]
+  brand             Brand?
+  follows           Follow[]
+  fittings          Fitting[]
+  invests           Invest[]
+  comments          Comment[]
+  notifications     Notification[]
 }
 
 model Brand {
@@ -83,6 +100,8 @@ model Brand {
   brand_logo     String?
   is_public      Boolean   @default(true)
   totalFollowers Int       @default(0)
+  design_count   Int       @default(0) // 최대 10개 제한 로직용
+  brand_story    String?   @db.Text
   deleted_at     DateTime?
 
   owner          User      @relation(fields: [owner_id], references: [user_id])
@@ -91,37 +110,91 @@ model Brand {
 }
 
 model Follow {
-  follow_id      Int      @id @default(autoincrement())
-  follower_id    Int
-  target_brand   Int
-  created_at     DateTime @default(now())
+  follow_id    Int      @id @default(autoincrement())
+  follower_id  Int
+  target_brand Int
+  created_at   DateTime @default(now())
 
-  follower       User     @relation(fields: [follower_id], references: [user_id])
-  brand          Brand    @relation(fields: [target_brand], references: [brand_id])
+  follower     User     @relation(fields: [follower_id], references: [user_id])
+  brand        Brand    @relation(fields: [target_brand], references: [brand_id])
 }
 
 model Cloth {
-  clothing_id    Int       @id @default(autoincrement())
-  brand_id       Int
-  clothing_name  String
-  category       Category
-  stretch        Int
-  weight         Int
-  stiffness      Int
-  thickness      Int
-  layer_order    Int
-  size_specs     Json
-  design_prompt  String
-  is_public      Boolean   @default(true)
-  viewCount      Int       @default(0)
-  likeCount      Int       @default(0)
-  likedUserIds   Int[]
-  ai_model_ver   String?
-  thumbnail_url  String?
-  deleted_at     DateTime?
+  clothing_id           Int             @id @default(autoincrement())
+  brand_id              Int
+  clothing_name         String
+  category              Category
+  description           String?         @db.Text
+  note                  String?         @db.Text
+  material              String?
+  origin                String?
+  sizes                 String[]
+  gender                Gender          @default(UNISEX)
+  style                 String?
+  price                 Int             @default(0)
+  
+  // 물리 값 (AI 피팅용)
+  stretch               Int
+  weight                Int
+  stiffness             Int
+  thickness             Int
+  layer_order           Int
+  size_specs            Json
+  
+  final_result_front_url String?
+  final_result_back_url  String?
+  
+  is_public             Boolean         @default(true)
+  viewCount             Int             @default(0)
+  likeCount             Int             @default(0)
+  likedUserIds          Int[]
+  
+  ai_model_ver          String?
+  thumbnail_url         String?
+  created_at            DateTime        @default(now())
+  deleted_at            DateTime?
 
-  brand          Brand     @relation(fields: [brand_id], references: [brand_id])
-  fund           Fund?
+  brand                 Brand           @relation(fields: [brand_id], references: [brand_id])
+  fund                  Fund?
+  design_attempts       DesignAttempt[]
+}
+
+model DesignAttempt {
+  attempt_id    Int      @id @default(autoincrement())
+  clothing_id   Int
+  input_images  String[]
+  design_prompt String
+  ai_result_url String
+  created_at    DateTime @default(now())
+
+  cloth         Cloth    @relation(fields: [clothing_id], references: [clothing_id])
+}
+
+model Fitting {
+  fitting_id          Int             @id @default(autoincrement())
+  user_id             Int
+  base_photo_url      String
+  internal_cloth_ids  Int[]
+  external_cloth_urls String[]
+  status              FittingStatus   @default(PENDING)
+  is_shared           Boolean         @default(false)
+  created_at          DateTime        @default(now())
+  deleted_at          DateTime?
+
+  user                User            @relation(fields: [user_id], references: [user_id])
+  results             FittingResult[]
+}
+
+model FittingResult {
+  result_id         Int      @id @default(autoincrement())
+  fitting_id        Int
+  result_img_url    String
+  generation_prompt String   @db.Text
+  fit_score         Float?
+  error_msg         String?
+  created_at        DateTime @default(now())
+
+  fitting           Fitting  @relation(fields: [fitting_id], references: [fitting_id])
 }
 
 model Fund {
@@ -132,28 +205,14 @@ model Fund {
   participantCount Int           @default(0)
   status           FundingStatus @default(FUNDING)
   deadline         DateTime
-  production_note  String?
+  delivery_date    DateTime?
+  production_note  String?       @db.Text
   view_count       Int           @default(0)
   deleted_at       DateTime?
 
   cloth            Cloth         @relation(fields: [clothing_id], references: [clothing_id])
   invests          Invest[]
   comments         Comment[]
-}
-
-model Fitting {
-  fitting_id     Int           @id @default(autoincrement())
-  user_id        Int
-  clothing_ids   Int[]
-  result_img_url String?
-  fit_score      Float?
-  is_shared      Boolean       @default(false)
-  created_at     DateTime      @default(now())
-  status         FittingStatus @default(PENDING)
-  error_msg      String?
-  deleted_at     DateTime?
-
-  user           User          @relation(fields: [user_id], references: [user_id])
 }
 
 model Invest {
@@ -180,17 +239,19 @@ model Comment {
   rating         Int?
   created_at     DateTime  @default(now())
   like_count     Int       @default(0)
+  is_brand_owner Boolean   @default(false)
   deleted_at     DateTime?
 
   fund           Fund      @relation(fields: [funding_id], references: [funding_id])
   user           User      @relation(fields: [user_id], references: [user_id])
-  parent         Comment?  @relation("ReplyTo", fields: [parent_id], references: [comment_id])
-  replies        Comment[] @relation("ReplyTo")
+  parent         Comment?  @relation("CommentToComment", fields: [parent_id], references: [comment_id])
+  replies        Comment[] @relation("CommentToComment")
 }
 
 model Notification {
   noti_id    Int      @id @default(autoincrement())
   user_id    Int
+  title      String
   type       NotiType
   message    String
   is_read    Boolean  @default(false)
@@ -198,4 +259,3 @@ model Notification {
 
   user       User     @relation(fields: [user_id], references: [user_id])
 }
-
