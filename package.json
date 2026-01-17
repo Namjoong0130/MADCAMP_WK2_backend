@@ -2,10 +2,10 @@
   "name": "modif-backend",
   "version": "1.0.0",
   "description": "MODIF AI Fitting Service Backend",
-  "main": "app.js",
+  "main": "index.js",
   "scripts": {
-    "start": "node app.js",
-    "dev": "nodemon app.js"
+    "start": "node index.js",
+    "dev": "nodemon index.js"
   },
   "dependencies": {
     "@prisma/client": "^6.19.2",
