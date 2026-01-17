@@ -8,6 +8,7 @@ const bcrypt = require('bcrypt');
 // 비밀번호를 그대로 저장하지 않고, 아무도 알아볼 수 없는 암호로 바꿔주는 보안 도구입니다.
 const jwt = require('jsonwebtoken');
 // 사용자가 로그인했다는 증표인 '디지털 신분증'을 발급해주는 도구입니다.
+const notificationService = require('./notificationService');
 
 exports.register = async (email, password, userName, height, weight) => {
   // 1. 이미 가입된 이메일인지 확인
@@ -18,7 +19,7 @@ exports.register = async (email, password, userName, height, weight) => {
   const hashedPassword = await bcrypt.hash(password, 10);
 
   // 3. 사용자 생성 (스키마의 필수값들을 채워줍니다)
-  return await prisma.user.create({
+  const user = await prisma.user.create({
     data: {
       email: email,
       password: hashedPassword,
@@ -35,6 +36,16 @@ exports.register = async (email, password, userName, height, weight) => {
       styleTags: [], 
     }
 });
+  await notificationService.createNotification({
+    userId: user.user_id,
+    title: '가입 축하',
+    message: '가입을 환영합니다. 축하 코인이 지급되었습니다.',
+    type: 'GENERAL',
+    url: '/portfolio',
+    data: { coins: user.coins },
+  });
+
+  return user;
 };
 // 스키마에서 타입 뒤에 ?가 없고 @default 설정도 없는 필드들은 반드시 입력
 // email: 유저 식별을 위한 필수 정보입니다.
