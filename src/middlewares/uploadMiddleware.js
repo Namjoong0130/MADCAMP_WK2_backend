@@ -3,25 +3,34 @@ const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const fs = require('fs');
 
-// 저장 폴더가 없으면 생성하는 로직
-const uploadDir = 'uploads/clothes';
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
-
-const storage = multer.diskStorage({
+// 저장 폴더를 동적으로 생성하는 헬퍼 함수
+const getStorage = (subDir) => multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, uploadDir); // 파일이 저장될 경로
+    const uploadPath = path.join('uploads', 'clothes', subDir);
+    if (!fs.existsSync(uploadPath)) {
+      fs.mkdirSync(uploadPath, { recursive: true });
+    }
+    cb(null, uploadPath);
   },
   filename: (req, file, cb) => {
-    const fileName = `${uuidv4()}${path.extname(file.originalname)}`;
-    cb(null, fileName); // 중복 방지를 위해 UUID로 파일명 생성
+    // 중복 방지를 위해 UUID 사용
+    cb(null, `${uuidv4()}${path.extname(file.originalname)}`);
   }
 });
 
-const upload = multer({ 
-  storage: storage,
+// 입력/출력 분리 설정
+const uploadInput = multer({ 
+  storage: getStorage('inputs'),
   limits: { fileSize: 10 * 1024 * 1024 } // 10MB 제한
 });
 
-module.exports = upload;
+const uploadResult = multer({ 
+  storage: getStorage('results'),
+  limits: { fileSize: 10 * 1024 * 1024 }
+});
+
+// ✅ 여러 개를 내보낼 때는 반드시 객체 형태로 묶어서 내보내야 합니다.
+module.exports = { 
+  uploadInput, 
+  uploadResult 
+};

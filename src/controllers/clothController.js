@@ -1,33 +1,15 @@
-const clothService = require('../services/clothService');
-
+// 예시용 clothController.js
 exports.registerDesign = async (req, res, next) => {
   try {
-    const { brand_id, clothing_name, design_prompt, ...physicalData } = req.body;
-    const inputFiles = req.files; // multer.array('images')로 받은 입력 파일들
-
-    // [로직] 여기서 AI API를 호출하고 결과물을 'results' 폴더에 저장했다고 가정합니다.
-    // 임시로 첫 번째 입력 파일의 이름을 결과 파일명으로 시뮬레이션합니다.
-    const tempResultFileName = `ai_output_${inputFiles[0].filename}`;
-
-    const clothData = {
-      clothing_name,
-      ...physicalData,
-      category: req.body.category || 'TOP'
-    };
-
-    const attemptData = { design_prompt };
-
-    const result = await clothService.createCloth(
-      Number(brand_id), 
-      clothData, 
-      attemptData, 
-      inputFiles, 
-      tempResultFileName
-    );
+    // req.files에 업로드된 파일 정보가 들어옵니다.
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ success: false, message: '이미지 파일이 없습니다.' });
+    }
 
     res.status(201).json({
       success: true,
-      data: result
+      message: '디자인이 임시 등록되었습니다.',
+      files: req.files.map(f => f.filename)
     });
   } catch (error) {
     next(error);
