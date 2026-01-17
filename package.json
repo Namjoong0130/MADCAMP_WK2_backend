@@ -11,26 +11,17 @@
   },
   "dependencies": {
     "@prisma/client": "^6.19.2",
-    "google-auth-library": "^9.4.1",
-    "aws-sdk": "^1.18.0",
-    "axios": "^1.13.2",
-    "bcrypt": "^6.0.0",
-    "cors": "^2.8.5",
-    "dotenv": "^16.3.1",
-    "express": "^4.18.2",
-    "jsonwebtoken": "^9.0.3",
-    "multer": "^2.0.2",
-    "uuid": "^13.0.0",
     "aws-sdk": "^2.1530.0",
     "axios": "^1.6.2",
     "bcrypt": "^5.1.1",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
+    "google-auth-library": "^9.15.1",
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
     "uuid": "^9.0.1"
-},
+  },
   "devDependencies": {
     "nodemon": "^3.0.2",
     "prisma": "^6.19.2"
