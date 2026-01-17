@@ -1,43 +1,42 @@
-const { OAuth2Client } = require('google-auth-library');
 const prisma = require('../config/prisma');
 const jwt = require('jsonwebtoken');
 
-const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+// 회원가입 (스키마의 모든 수치 데이터 반영)
+exports.register = async (userData) => {
+  const { email, password, userName, height, weight } = userData;
 
-exports.verifyGoogleToken = async (idToken) => {
-  const ticket = await client.verifyIdToken({
-    idToken,
-    audience: process.env.GOOGLE_CLIENT_ID,
+  // 1. 중복 확인
+  const existingUser = await prisma.user.findUnique({ where: { email } });
+  if (existingUser) throw new Error('이미 사용 중인 이메일입니다.');
+
+  // 2. 사용자 생성 (기본값 설정 포함)
+  return await prisma.user.create({
+    data: {
+      email,
+      password, // 요청대로 평문 저장
+      userName,
+      height: parseFloat(height),
+      weight: parseFloat(weight),
+      coins: 1000,    // 가입 축하금
+      tokens: 5,      // 초기 디자인 토큰 예시
+      styleTags: [],  // 빈 배열 초기화
+    }
   });
-  return ticket.getPayload(); // 구글 사용자 정보(email, name, sub 등) 반환
 };
 
-exports.loginOrSignup = async (googleUser) => {
-  const { sub: google_id, email, name } = googleUser;
-
-  // 1. 기존 사용자인지 확인
-  let user = await prisma.user.findUnique({ where: { email } });
-
-  // 2. 신규 사용자라면 생성 (회원가입)
-  if (!user) {
-    user = await prisma.user.create({
-      data: {
-        google_id,
-        email,
-        userName: name,
-        // 스키마 필수값 대응 (가입 후 설문으로 유도 권장)
-        height: 0, 
-        weight: 0,
-        coins: 1000, // 가입 축하금 예시
-      }
-    });
+// 로그인
+exports.login = async (email, password) => {
+  const user = await prisma.user.findUnique({ where: { email } });
+  
+  if (!user || user.password !== password) {
+    throw new Error('이메일 또는 비밀번호가 잘못되었습니다.');
   }
 
-  // 3. 애플리케이션 전용 JWT 발급
+  // JWT 발급 (기존 authMiddleware와 100% 호환)
   const token = jwt.sign(
     { userId: user.user_id, email: user.email },
     process.env.JWT_SECRET,
-    { expiresIn: '7d' } // 7일간 유지
+    { expiresIn: '7d' }
   );
 
   return { user, token };

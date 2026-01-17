@@ -1,20 +1,21 @@
 const authService = require('../services/authService');
 
-exports.googleLogin = async (req, res, next) => {
+exports.signup = async (req, res, next) => {
   try {
-    const { idToken } = req.body; // 프론트엔드에서 보낸 구글 ID 토큰
-
-    // 1. 구글 토큰 검증
-    const googleUser = await authService.verifyGoogleToken(idToken);
-
-    // 2. 로그인 또는 회원가입 처리
-    const { user, token } = await authService.loginOrSignup(googleUser);
-
-    res.status(200).json({
-      success: true,
-      data: { user, token }
-    });
+    // 프론트엔드에서 보낸 모든 신체 정보를 서비스로 전달
+    const user = await authService.register(req.body);
+    res.status(201).json({ success: true, data: user });
   } catch (error) {
-    res.status(401).json({ success: false, message: '유효하지 않은 구글 토큰입니다.' });
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+exports.login = async (req, res, next) => {
+  try {
+    const { email, password } = req.body;
+    const result = await authService.login(email, password);
+    res.status(200).json({ success: true, data: result });
+  } catch (error) {
+    res.status(401).json({ success: false, message: error.message });
   }
 };
