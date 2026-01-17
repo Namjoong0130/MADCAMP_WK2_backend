@@ -55,6 +55,8 @@ model User {
   email             String        @unique
   password          String?
   userName          String
+  phoneNumber       String?
+  profile_img_url   String?
   
   // 신체 수치 (Unique 제거)
   height            Float
@@ -82,6 +84,7 @@ model User {
   
   updatedAt         DateTime      @updatedAt
   refresh_token     String?
+  created_at        DateTime      @default(now())
   deleted_at        DateTime?
 
   // Relations
@@ -129,6 +132,7 @@ model Cloth {
   material              String?
   origin                String?
   sizes                 String[]
+  color                 String?
   gender                Gender          @default(UNISEX)
   style                 String?
   price                 Int             @default(0)
@@ -176,6 +180,8 @@ model Fitting {
   base_photo_url      String
   internal_cloth_ids  Int[]
   external_cloth_urls String[]
+  note                String?         @db.Text
+  tags                String[]
   status              FittingStatus   @default(PENDING)
   is_shared           Boolean         @default(false)
   created_at          DateTime        @default(now())
@@ -188,6 +194,7 @@ model Fitting {
 model FittingResult {
   result_id         Int      @id @default(autoincrement())
   fitting_id        Int
+  user_id           Int
   result_img_url    String
   generation_prompt String   @db.Text
   fit_score         Float?
@@ -200,10 +207,15 @@ model FittingResult {
 model Fund {
   funding_id       Int           @id @default(autoincrement())
   clothing_id      Int           @unique
+  user_id          Int
+  title            String
+  description      String?        @db.Text
   goal_amount      Int
   current_amount   Int           @default(0)
   participantCount Int           @default(0)
   status           FundingStatus @default(FUNDING)
+  created_at       DateTime      @default(now())
+  updated_at       DateTime      @updatedAt
   deadline         DateTime
   delivery_date    DateTime?
   production_note  String?       @db.Text
@@ -253,9 +265,12 @@ model Notification {
   user_id    Int
   title      String
   type       NotiType
+  url        String?
+  data       Json?
   message    String
   is_read    Boolean  @default(false)
   created_at DateTime @default(now())
+  deleted_at DateTime?
 
   user       User     @relation(fields: [user_id], references: [user_id])
 }
