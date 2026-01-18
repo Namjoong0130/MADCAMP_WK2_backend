@@ -56,7 +56,10 @@ exports.createDesignAttempt = async (req, res, next) => {
 
 exports.listDesignAttempts = async (req, res, next) => {
   try {
-    const attempts = await clothService.listDesignAttempts(Number(req.params.clothId));
+    const attempts = await clothService.listDesignAttempts(
+      req.user.userId,
+      Number(req.params.clothId)
+    );
     return success(res, attempts);
   } catch (error) {
     next(error);

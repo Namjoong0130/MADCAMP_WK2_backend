@@ -36,3 +36,21 @@ exports.toggleFollow = async (req, res, next) => {
     next(error);
   }
 };
+
+exports.listBrandProfiles = async (req, res, next) => {
+  try {
+    const profiles = await brandService.listBrandProfiles();
+    return success(res, profiles);
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.getBrandProfile = async (req, res, next) => {
+  try {
+    const profile = await brandService.getBrandProfile(Number(req.params.brandId));
+    return success(res, profile);
+  } catch (error) {
+    next(error);
+  }
+};

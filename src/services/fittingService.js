@@ -1,6 +1,7 @@
 const prisma = require('../config/prisma');
 const { createError } = require('../utils/responseHandler');
 const { requireFields } = require('../utils/validator');
+const { toFrontendFittingHistory } = require('../utils/transformers');
 const notificationService = require('./notificationService');
 
 exports.createFitting = async (userId, payload) => {
@@ -84,4 +85,14 @@ exports.createFittingResult = async (userId, fittingId, payload) => {
   }
 
   return result;
+};
+
+exports.listFittingAlbum = async (userId) => {
+  const fittings = await prisma.fitting.findMany({
+    where: { user_id: userId, deleted_at: null },
+    include: { results: { orderBy: { created_at: 'desc' }, take: 1 } },
+    orderBy: { created_at: 'desc' },
+  });
+
+  return fittings.map((fitting) => toFrontendFittingHistory(fitting));
 };

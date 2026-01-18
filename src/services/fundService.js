@@ -1,9 +1,16 @@
 const prisma = require('../config/prisma');
 const { createError } = require('../utils/responseHandler');
 const { requireFields, toNumber } = require('../utils/validator');
+const {
+  buildHandle,
+  toFrontendCloth,
+  toFrontendFunding,
+  toFrontendComment,
+  toFrontendInvestment,
+} = require('../utils/transformers');
 const notificationService = require('./notificationService');
 
-exports.listFundingFeed = async () => {
+exports.listFundingFeed = async (userId) => {
   const funds = await prisma.fund.findMany({
     where: { status: 'FUNDING', deleted_at: null },
     include: {
@@ -12,13 +19,17 @@ exports.listFundingFeed = async () => {
           clothing_id: true,
           clothing_name: true,
           thumbnail_url: true,
+          final_result_front_url: true,
           category: true,
           style: true,
           gender: true,
           price: true,
           size_specs: true,
+          likedUserIds: true,
+          likeCount: true,
+          is_public: true,
           brand: {
-            select: { brand_id: true, brand_name: true },
+            select: { brand_id: true, brand_name: true, owner: true },
           },
         },
       },
@@ -26,24 +37,32 @@ exports.listFundingFeed = async () => {
     orderBy: { created_at: 'desc' },
   });
 
-  return funds.map((fund) => ({
-    funding_id: fund.funding_id,
-    title: fund.title,
-    goal_amount: fund.goal_amount,
-    current_amount: fund.current_amount,
-    participantCount: fund.participantCount,
-    progress: fund.goal_amount > 0 ? fund.current_amount / fund.goal_amount : 0,
-    deadline: fund.deadline,
-    cloth: fund.cloth,
-  }));
+  return funds.map((fund) => {
+    const likedUserIds = fund.cloth?.likedUserIds || [];
+    const liked = userId ? likedUserIds.includes(userId) : false;
+    const likes = fund.cloth?.likeCount || 0;
+    const designerHandle = buildHandle(fund.cloth?.brand?.owner?.userName);
+
+    return {
+      ...toFrontendFunding(fund, {
+        liked,
+        likes,
+        designerHandle,
+      }),
+      participantCount: fund.participantCount,
+      progress: fund.goal_amount > 0 ? fund.current_amount / fund.goal_amount : 0,
+      deadline: fund.deadline,
+      cloth: fund.cloth ? toFrontendCloth(fund.cloth) : null,
+    };
+  });
 };
 
-exports.getFundDetail = async (fundId) => {
+exports.getFundDetail = async (fundId, userId) => {
   const fund = await prisma.fund.findUnique({
     where: { funding_id: fundId },
     include: {
       cloth: {
-        include: { brand: true },
+        include: { brand: { include: { owner: true } } },
       },
       comments: {
         where: { deleted_at: null },
@@ -57,7 +76,21 @@ exports.getFundDetail = async (fundId) => {
   });
 
   if (!fund || fund.deleted_at) throw createError(404, '펀딩을 찾을 수 없습니다.');
-  return fund;
+  const likedUserIds = fund.cloth?.likedUserIds || [];
+  const liked = userId ? likedUserIds.includes(userId) : false;
+  const likes = fund.cloth?.likeCount || 0;
+  const designerHandle = buildHandle(fund.cloth?.brand?.owner?.userName);
+
+  return {
+    ...fund,
+    frontend: {
+      ...toFrontendFunding(fund, { liked, likes, designerHandle }),
+      cloth: fund.cloth ? toFrontendCloth(fund.cloth) : null,
+      comments: fund.comments?.map((comment) =>
+        toFrontendComment(comment, fund.clothing_id)
+      ),
+    },
+  };
 };
 
 exports.createFund = async (userId, payload) => {
@@ -65,11 +98,22 @@ exports.createFund = async (userId, payload) => {
 
   const cloth = await prisma.cloth.findUnique({
     where: { clothing_id: Number(payload.clothing_id) },
-    include: { brand: true },
+    include: { brand: true, fund: true },
   });
   if (!cloth) throw createError(404, '의류를 찾을 수 없습니다.');
   if (cloth.brand.owner_id !== userId) {
     throw createError(403, '펀딩 생성 권한이 없습니다.');
+  }
+  if (cloth.fund) {
+    throw createError(400, '이미 해당 의류에 대한 펀딩이 존재합니다.');
+  }
+
+  const deadline = new Date(payload.deadline);
+  if (Number.isNaN(deadline.getTime())) {
+    throw createError(400, '마감일 형식이 올바르지 않습니다.');
+  }
+  if (deadline <= new Date()) {
+    throw createError(400, '마감일은 미래 날짜여야 합니다.');
   }
 
   return prisma.fund.create({
@@ -79,7 +123,7 @@ exports.createFund = async (userId, payload) => {
       title: payload.title,
       description: payload.description || null,
       goal_amount: toNumber(payload.goal_amount, 'goal_amount'),
-      deadline: new Date(payload.deadline),
+      deadline,
       delivery_date: payload.delivery_date ? new Date(payload.delivery_date) : null,
     },
   });
@@ -104,6 +148,12 @@ exports.createInvestment = async (userId, fundId, payload) => {
       },
     });
     if (!fund) throw createError(404, '펀딩을 찾을 수 없습니다.');
+    if (fund.status !== 'FUNDING') {
+      throw createError(400, '펀딩이 진행 중인 상태가 아닙니다.');
+    }
+    if (fund.deadline && fund.deadline < new Date()) {
+      throw createError(400, '펀딩 마감일이 지났습니다.');
+    }
 
     const invest = await tx.invest.create({
       data: {
@@ -197,6 +247,9 @@ exports.createComment = async (userId, fundId, payload) => {
       rating: payload.rating || null,
       is_brand_owner: isBrandOwner,
     },
+    include: {
+      user: { select: { user_id: true, userName: true, profile_img_url: true } },
+    },
   });
 
   const recipients = new Set();
@@ -220,10 +273,16 @@ exports.createComment = async (userId, fundId, payload) => {
     data: { funding_id: fund.funding_id, comment_id: comment.comment_id },
   }));
 
-  return comment;
+  return toFrontendComment(comment, fund.cloth?.clothing_id);
 };
 
 exports.listComments = async (fundId) => {
+  const fund = await prisma.fund.findUnique({
+    where: { funding_id: fundId },
+    select: { clothing_id: true },
+  });
+  if (!fund) throw createError(404, '펀딩을 찾을 수 없습니다.');
+
   const comments = await prisma.comment.findMany({
     where: { funding_id: fundId, deleted_at: null },
     include: {
@@ -233,7 +292,7 @@ exports.listComments = async (fundId) => {
     orderBy: { created_at: 'desc' },
   });
 
-  return comments;
+  return comments.map((comment) => toFrontendComment(comment, fund.clothing_id));
 };
 
 exports.updateProductionNote = async (userId, fundId, payload) => {
@@ -390,4 +449,117 @@ exports.processFundingFailures = async () => {
   }
 
   return { failed_funding_ids: results };
+};
+
+exports.toggleFundingLike = async (userId, fundId) => {
+  return prisma.$transaction(async (tx) => {
+    const fund = await tx.fund.findUnique({
+      where: { funding_id: fundId },
+      include: { cloth: true },
+    });
+    if (!fund || fund.deleted_at) throw createError(404, '펀딩을 찾을 수 없습니다.');
+
+    const likedUserIds = fund.cloth?.likedUserIds || [];
+    const hasLiked = likedUserIds.includes(userId);
+    const nextLikedUserIds = hasLiked
+      ? likedUserIds.filter((id) => id !== userId)
+      : [...likedUserIds, userId];
+
+    const nextLikeCount = Math.max(
+      0,
+      (fund.cloth?.likeCount || 0) + (hasLiked ? -1 : 1)
+    );
+
+    const updated = await tx.cloth.update({
+      where: { clothing_id: fund.cloth.clothing_id },
+      data: {
+        likedUserIds: { set: nextLikedUserIds },
+        likeCount: nextLikeCount,
+      },
+    });
+
+    return { liked: !hasLiked, likes: updated.likeCount };
+  });
+};
+
+exports.listOwnerFunds = async (userId) => {
+  const brand = await prisma.brand.findUnique({ where: { owner_id: userId } });
+  if (!brand) return [];
+
+  const funds = await prisma.fund.findMany({
+    where: { cloth: { brand_id: brand.brand_id }, deleted_at: null },
+    include: {
+      cloth: true,
+    },
+    orderBy: { created_at: 'desc' },
+  });
+
+  return funds.map((fund) => ({
+    id: fund.funding_id,
+    brand: brand.brand_name,
+    participantCount: fund.participantCount,
+    currentCoin: fund.current_amount,
+    production_note: fund.production_note || '',
+    progress: fund.goal_amount > 0 ? fund.current_amount / fund.goal_amount : 0,
+  }));
+};
+
+exports.listUserInvestments = async (userId) => {
+  const investments = await prisma.invest.findMany({
+    where: { user_id: userId, is_cancelled: false },
+    include: {
+      fund: {
+        include: {
+          cloth: {
+            include: { brand: true },
+          },
+        },
+      },
+    },
+    orderBy: { created_at: 'desc' },
+  });
+
+  return investments.map((invest) =>
+    toFrontendInvestment(invest, invest.fund?.cloth, invest.fund?.cloth?.brand)
+  );
+};
+
+exports.cancelInvestment = async (userId, investId) => {
+  return prisma.$transaction(async (tx) => {
+    const invest = await tx.invest.findUnique({
+      where: { invest_id: investId },
+      include: { fund: true },
+    });
+    if (!invest || invest.user_id !== userId) {
+      throw createError(404, '투자 내역을 찾을 수 없습니다.');
+    }
+    if (invest.is_cancelled) {
+      throw createError(400, '이미 취소된 투자입니다.');
+    }
+
+    await tx.invest.update({
+      where: { invest_id: investId },
+      data: { is_cancelled: true },
+    });
+
+    await tx.user.update({
+      where: { user_id: userId },
+      data: { coins: { increment: invest.amount } },
+    });
+
+    if (invest.fund) {
+      const nextAmount = Math.max(0, invest.fund.current_amount - invest.amount);
+      const nextParticipants = Math.max(0, invest.fund.participantCount - 1);
+      await tx.fund.update({
+        where: { funding_id: invest.funding_id },
+        data: {
+          current_amount: nextAmount,
+          participantCount: nextParticipants,
+          status: 'FUNDING',
+        },
+      });
+    }
+
+    return { cancelled: true };
+  });
 };

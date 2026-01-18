@@ -43,3 +43,12 @@ exports.createFittingResult = async (req, res, next) => {
     next(error);
   }
 };
+
+exports.listFittingAlbum = async (req, res, next) => {
+  try {
+    const album = await fittingService.listFittingAlbum(req.user.userId);
+    return success(res, album);
+  } catch (error) {
+    next(error);
+  }
+};

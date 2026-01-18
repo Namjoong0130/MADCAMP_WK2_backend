@@ -1,6 +1,7 @@
 const prisma = require('../config/prisma');
 const { createError } = require('../utils/responseHandler');
 const { requireFields } = require('../utils/validator');
+const { buildHandle } = require('../utils/transformers');
 const notificationService = require('./notificationService');
 
 exports.createBrand = async (userId, payload) => {
@@ -64,6 +65,54 @@ exports.getBrandDetail = async (brandId) => {
   });
   if (!brand || brand.deleted_at) throw createError(404, '브랜드를 찾을 수 없습니다.');
   return brand;
+};
+
+exports.listBrandProfiles = async () => {
+  const brands = await prisma.brand.findMany({
+    where: { deleted_at: null },
+    include: { owner: true },
+    orderBy: { brand_id: 'desc' },
+  });
+
+  return Promise.all(
+    brands.map(async (brand) => {
+      const followingCount = await prisma.follow.count({
+        where: { follower_id: brand.owner_id },
+      });
+
+      return {
+        id: brand.brand_id,
+        brand: brand.brand_name,
+        handle: buildHandle(brand.owner?.userName),
+        followerCount: brand.totalFollowers,
+        followingCount,
+        bio: brand.brand_story || '',
+        location: null,
+      };
+    })
+  );
+};
+
+exports.getBrandProfile = async (brandId) => {
+  const brand = await prisma.brand.findUnique({
+    where: { brand_id: brandId },
+    include: { owner: true },
+  });
+  if (!brand || brand.deleted_at) throw createError(404, '브랜드를 찾을 수 없습니다.');
+
+  const followingCount = await prisma.follow.count({
+    where: { follower_id: brand.owner_id },
+  });
+
+  return {
+    id: brand.brand_id,
+    brand: brand.brand_name,
+    handle: buildHandle(brand.owner?.userName),
+    followerCount: brand.totalFollowers,
+    followingCount,
+    bio: brand.brand_story || '',
+    location: null,
+  };
 };
 
 exports.toggleFollow = async (userId, brandId) => {

@@ -18,3 +18,21 @@ exports.updateBodyMetrics = async (req, res, next) => {
     next(error);
   }
 };
+
+exports.getProfile = async (req, res, next) => {
+  try {
+    const profile = await userService.getUserProfile(req.user.userId);
+    return success(res, profile);
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.updateProfile = async (req, res, next) => {
+  try {
+    const updated = await userService.updateUserProfile(req.user.userId, req.body);
+    return success(res, updated, '프로필이 업데이트되었습니다.');
+  } catch (error) {
+    next(error);
+  }
+};

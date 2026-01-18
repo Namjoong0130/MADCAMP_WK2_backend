@@ -2,9 +2,58 @@ const prisma = require('../config/prisma');
 const { createError } = require('../utils/responseHandler');
 
 exports.listNotifications = async (userId) => {
-  return prisma.notification.findMany({
+  const notifications = await prisma.notification.findMany({
     where: { user_id: userId, deleted_at: null },
     orderBy: { created_at: 'desc' },
+  });
+
+  const fundingIds = Array.from(
+    new Set(
+      notifications
+        .map((noti) => {
+          const value = noti.data?.funding_id;
+          if (typeof value === 'number') return value;
+          if (typeof value === 'string' && value.trim() !== '') return Number(value);
+          return null;
+        })
+        .filter((fundingId) => Number.isFinite(fundingId))
+    )
+  );
+
+  const funds = fundingIds.length
+    ? await prisma.fund.findMany({
+        where: { funding_id: { in: fundingIds } },
+        select: { funding_id: true, clothing_id: true },
+      })
+    : [];
+
+  const fundMap = funds.reduce((map, fund) => {
+    map[fund.funding_id] = fund;
+    return map;
+  }, {});
+
+  return notifications.map((noti) => {
+    const data = noti.data || {};
+    const fund = data.funding_id ? fundMap[data.funding_id] : null;
+    const clothingId = data.clothing_id || fund?.clothing_id || null;
+    const target = clothingId
+      ? {
+          type: data.comment_id ? 'feedback' : 'detail',
+          clothingId,
+        }
+      : null;
+
+    return {
+      id: noti.noti_id,
+      title: noti.title,
+      message: noti.message,
+      target,
+      is_read: noti.is_read,
+      created_at: noti.created_at,
+      type: noti.type,
+      url: noti.url,
+      data: noti.data,
+    };
   });
 };
 
